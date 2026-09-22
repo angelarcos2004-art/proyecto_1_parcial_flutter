@@ -6,8 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+// Punto de entrada de la aplicación Flutter.
 void main() => runApp(const MyApp());
 
+// Configuración global del tema y pantalla inicial.
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -35,6 +37,7 @@ class GalleryPage extends StatefulWidget {
   State<GalleryPage> createState() => _GalleryPageState();
 }
 
+// Controla la galería, favoritos, navegación y apertura del editor.
 class _GalleryPageState extends State<GalleryPage> {
   static const _galleryColor = Color(0xff111315);
   final PageController _pageController = PageController();
@@ -63,6 +66,7 @@ class _GalleryPageState extends State<GalleryPage> {
   }
 
   Future<void> _loadGallery() async {
+    // Solicita acceso y carga imágenes de todos los álbumes disponibles.
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -117,6 +121,7 @@ class _GalleryPageState extends State<GalleryPage> {
   }
 
   Future<void> _toggleFavorite() async {
+    // Actualiza el favorito actual y persiste sus IDs localmente.
     final asset = _currentAsset;
     if (asset == null) return;
     final preferences = await SharedPreferences.getInstance();
@@ -131,6 +136,7 @@ class _GalleryPageState extends State<GalleryPage> {
   }
 
   Future<void> _deleteCurrentAsset() async {
+    // Elimina la fotografía del dispositivo después de confirmación.
     final asset = _currentAsset;
     if (asset == null) return;
 
@@ -177,6 +183,7 @@ class _GalleryPageState extends State<GalleryPage> {
   }
 
   void _openEditor() {
+    // Cambia el árbol principal de la galería al editor de la foto actual.
     if (_currentAsset == null) return;
     setState(() {
       _isEditorOpen = true;
@@ -184,6 +191,7 @@ class _GalleryPageState extends State<GalleryPage> {
   }
 
   void _goToPhoto(int offset) {
+    // Mueve el carrusel una posición hacia adelante o hacia atrás.
     if (_assets.isEmpty) return;
     final nextIndex = (_currentIndex + offset).clamp(0, _assets.length - 1);
     _pageController.animateToPage(
@@ -263,6 +271,7 @@ class _GalleryPageState extends State<GalleryPage> {
   }
 
   Widget _buildGalleryBody() {
+    // Construye el visor principal y las acciones inferiores.
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -381,6 +390,7 @@ class _GalleryPageState extends State<GalleryPage> {
   }
 
   Widget _buildFavoritesBody() {
+    // Construye la cuadrícula con las fotografías marcadas como favoritas.
     final favorites = _assets.where((asset) => _favoriteIds.contains(asset.id)).toList();
     if (favorites.isEmpty) {
       return const Center(child: Text('Aún no hay favoritos.'));
@@ -452,6 +462,7 @@ class _BottomAction extends StatelessWidget {
 
 enum PhotoEditorTool { draw, erase, crop }
 
+// Representa un trazo completo para conservar color, grosor y modo goma.
 class DrawOp {
   DrawOp({
     required this.path,
@@ -482,6 +493,7 @@ class PhotoEditorView extends StatefulWidget {
   State<PhotoEditorView> createState() => _PhotoEditorViewState();
 }
 
+// Estado del editor: dibujo, goma, recorte y preparación de la imagen final.
 class _PhotoEditorViewState extends State<PhotoEditorView>
   with SingleTickerProviderStateMixin {
   final List<DrawOp> _drawOps = [];
@@ -516,6 +528,7 @@ class _PhotoEditorViewState extends State<PhotoEditorView>
   }
 
   Future<void> _loadEditorImageSize() async {
+    // Carga una previsualización para mantener fluida la edición.
     final bytes = await widget.asset.thumbnailDataWithSize(
       const ThumbnailSize(1600, 1600),
     );
@@ -541,12 +554,14 @@ class _PhotoEditorViewState extends State<PhotoEditorView>
   }
 
   Rect _fitImageBounds(Size size) {
+    // Calcula el rectángulo visible de la foto usando BoxFit.contain.
     if (_imageSize.isEmpty || size.isEmpty) return Offset.zero & size;
     final fitted = applyBoxFit(BoxFit.contain, _imageSize, size);
     return Alignment.center.inscribe(fitted.destination, Offset.zero & size);
   }
 
   Rect _clampCrop(Rect rect, Rect bounds) {
+    // Mantiene el marco dentro de los límites reales de la imagen.
     final width = rect.width.clamp(80.0, bounds.width).toDouble();
     final height = rect.height.clamp(80.0, bounds.height).toDouble();
     final left = rect.left.clamp(bounds.left, bounds.right - width).toDouble();
@@ -555,6 +570,7 @@ class _PhotoEditorViewState extends State<PhotoEditorView>
   }
 
   void _initCropRectIfNeeded(Size size) {
+    // Inicializa el marco una sola vez cuando ya se conocen las dimensiones.
     if (_cropInitialized || _imageSize.isEmpty || size.width == 0 || size.height == 0) {
       return;
     }
@@ -574,6 +590,7 @@ class _PhotoEditorViewState extends State<PhotoEditorView>
   }
 
   void _beginDraw(Offset point) {
+    // Inicia un trazo nuevo o una pasada de goma.
     final path = Path()..moveTo(point.dx, point.dy);
     setState(() {
       _activeOp = DrawOp(
@@ -588,6 +605,7 @@ class _PhotoEditorViewState extends State<PhotoEditorView>
   }
 
   void _updateDraw(Offset point) {
+    // Añade puntos al trazo mientras el usuario arrastra el dedo.
     if (_activeOp == null) return;
     final path = _activeOp!.path;
     setState(() {
@@ -596,6 +614,7 @@ class _PhotoEditorViewState extends State<PhotoEditorView>
   }
 
   void _endDraw() {
+    // Guarda el trazo terminado para mostrarlo y exportarlo.
     if (_activeOp == null) return;
     setState(() {
       _drawOps.add(_activeOp!);
@@ -604,6 +623,7 @@ class _PhotoEditorViewState extends State<PhotoEditorView>
   }
 
   void _undo() {
+    // Deshace el último trazo o restablece el marco de recorte.
     if (_tool == PhotoEditorTool.draw) {
       setState(() {
         if (_activeOp != null) {
@@ -627,11 +647,13 @@ class _PhotoEditorViewState extends State<PhotoEditorView>
   }
 
   void _enterCropMode() {
+    // Activa el modo de recorte con la imagen en su vista normal.
     _restoreNormalViewport();
     setState(() => _tool = PhotoEditorTool.crop);
   }
 
   void _beginCropGesture(Offset point) {
+    // Detecta si el gesto inicia en una esquina o dentro del marco.
     _cropRect = _cropRect.intersect(_imageBounds);
     final handles = [
       _cropRect.topLeft,
@@ -653,6 +675,7 @@ class _PhotoEditorViewState extends State<PhotoEditorView>
   }
 
   void _updateCrop(Offset point) {
+    // Mueve el marco o cambia su tamaño respetando imageBounds.
     if (_cropOrigin != null) {
       final dx = point.dx - _cropOrigin!.dx;
       final dy = point.dy - _cropOrigin!.dy;
@@ -719,11 +742,13 @@ class _PhotoEditorViewState extends State<PhotoEditorView>
   }
 
   void _endCropGesture() {
+    // Finaliza el gesto de recorte y libera sus referencias activas.
     _cropOrigin = null;
     _activeCropHandle = null;
   }
 
   Future<void> _saveEditedImage() async {
+    // Renderiza la imagen recortada, aplica los trazos y la guarda en la galería.
     final originalBytes = await widget.asset.originBytes ??
         await widget.asset.thumbnailDataWithSize(const ThumbnailSize(2000, 2000));
     if (originalBytes == null) {
@@ -826,6 +851,7 @@ class _PhotoEditorViewState extends State<PhotoEditorView>
   }
 
   Future<void> _handleSave() async {
+    // Evita guardados duplicados y muestra el error real si la exportación falla.
     if (_isSaving) return;
     setState(() => _isSaving = true);
     try {
@@ -1072,6 +1098,7 @@ class _StrokePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Dibuja únicamente los trazos para no redibujar la fotografía completa.
     if (drawOps.isEmpty && activeOp == null) return;
     canvas.saveLayer(Offset.zero & size, Paint());
     for (final op in [...drawOps, ...?activeOp == null ? null : [activeOp!]]) {
@@ -1138,6 +1165,7 @@ class _CropPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Oscurece el exterior y dibuja borde, cuadrícula 3x3 y esquinas.
     final path = Path.combine(
       PathOperation.difference,
       Path()..addRect(Offset.zero & size),
