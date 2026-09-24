@@ -560,12 +560,31 @@ class _PhotoEditorViewState extends State<PhotoEditorView>
     return Alignment.center.inscribe(fitted.destination, Offset.zero & size);
   }
 
+  double _safeClamp(double value, double min, double max) {
+    final realMin = min < max ? min : max;
+    final realMax = min < max ? max : min;
+    return value.clamp(realMin, realMax);
+  }
+
   Rect _clampCrop(Rect rect, Rect bounds) {
     // Mantiene el marco dentro de los límites reales de la imagen.
-    final width = rect.width.clamp(80.0, bounds.width).toDouble();
-    final height = rect.height.clamp(80.0, bounds.height).toDouble();
-    final left = rect.left.clamp(bounds.left, bounds.right - width).toDouble();
-    final top = rect.top.clamp(bounds.top, bounds.bottom - height).toDouble();
+    if (bounds.isEmpty || bounds.width <= 0 || bounds.height <= 0) {
+      return bounds;
+    }
+    final maxAllowedWidth = bounds.width;
+    final maxAllowedHeight = bounds.height;
+    final minWidth = maxAllowedWidth < 80.0 ? maxAllowedWidth : 80.0;
+    final minHeight = maxAllowedHeight < 80.0 ? maxAllowedHeight : 80.0;
+
+    final width = _safeClamp(rect.width, minWidth, maxAllowedWidth);
+    final height = _safeClamp(rect.height, minHeight, maxAllowedHeight);
+
+    final maxLeft = bounds.right - width;
+    final maxTop = bounds.bottom - height;
+
+    final left = _safeClamp(rect.left, bounds.left, maxLeft);
+    final top = _safeClamp(rect.top, bounds.top, maxTop);
+
     return Rect.fromLTWH(left, top, width, height);
   }
 
@@ -575,9 +594,9 @@ class _PhotoEditorViewState extends State<PhotoEditorView>
       return;
     }
     _imageBounds = _fitImageBounds(size);
-    if (_imageBounds.isEmpty) return;
-    final width = size.width * 0.78;
-    final height = size.height * 0.70;
+    if (_imageBounds.isEmpty || _imageBounds.width <= 0 || _imageBounds.height <= 0) return;
+    final width = _imageBounds.width * 0.85;
+    final height = _imageBounds.height * 0.85;
     _cropRect = _clampCrop(
       Rect.fromCenter(
         center: _imageBounds.center,
@@ -680,16 +699,26 @@ class _PhotoEditorViewState extends State<PhotoEditorView>
       final dx = point.dx - _cropOrigin!.dx;
       final dy = point.dy - _cropOrigin!.dy;
       _cropOrigin = point;
-      final maxLeft = (_imageBounds.right - _cropRect.width)
-          .clamp(_imageBounds.left, _imageBounds.right);
-      final maxTop = (_imageBounds.bottom - _cropRect.height)
-          .clamp(_imageBounds.top, _imageBounds.bottom);
-        final nextLeft = (_cropRect.left + dx)
-          .clamp(_imageBounds.left, maxLeft)
-          .toDouble();
-        final nextTop = (_cropRect.top + dy)
-          .clamp(_imageBounds.top, maxTop)
-          .toDouble();
+      final maxLeft = _safeClamp(
+        _imageBounds.right - _cropRect.width,
+        _imageBounds.left,
+        _imageBounds.right,
+      );
+      final maxTop = _safeClamp(
+        _imageBounds.bottom - _cropRect.height,
+        _imageBounds.top,
+        _imageBounds.bottom,
+      );
+      final nextLeft = _safeClamp(
+        _cropRect.left + dx,
+        _imageBounds.left,
+        maxLeft,
+      );
+      final nextTop = _safeClamp(
+        _cropRect.top + dy,
+        _imageBounds.top,
+        maxTop,
+      );
       setState(() {
         _cropRect = _clampCrop(
           Rect.fromLTWH(nextLeft, nextTop, _cropRect.width, _cropRect.height),
@@ -701,14 +730,16 @@ class _PhotoEditorViewState extends State<PhotoEditorView>
 
     if (_activeCropHandle == null) return;
 
-    final minSize = 80.0;
+    final minSize = _imageBounds.width < 80.0
+        ? _imageBounds.width
+        : (_imageBounds.height < 80.0 ? _imageBounds.height : 80.0);
     final current = _cropRect;
 
     switch (_activeCropHandle!) {
       case _CropHandleType.topLeft:
         setState(() {
-          final left = point.dx.clamp(_imageBounds.left, current.right - minSize).toDouble();
-          final top = point.dy.clamp(_imageBounds.top, current.bottom - minSize).toDouble();
+          final left = _safeClamp(point.dx, _imageBounds.left, current.right - minSize);
+          final top = _safeClamp(point.dy, _imageBounds.top, current.bottom - minSize);
           _cropRect = _clampCrop(
             Rect.fromLTRB(left, top, current.right, current.bottom),
             _imageBounds,
@@ -717,26 +748,35 @@ class _PhotoEditorViewState extends State<PhotoEditorView>
       case _CropHandleType.topRight:
         setState(() {
           final left = current.left;
-          final top = point.dy.clamp(_imageBounds.top, current.bottom - minSize).toDouble();
-          final right = point.dx.clamp(current.left + minSize, _imageBounds.right).toDouble();
+          final top = _safeClamp(point.dy, _imageBounds.top, current.bottom - minSize);
+          final right = _safeClamp(point.dx, current.left + minSize, _imageBounds.right);
           final bottom = current.bottom;
-          _cropRect = Rect.fromLTRB(left, top, right, bottom);
+          _cropRect = _clampCrop(
+            Rect.fromLTRB(left, top, right, bottom),
+            _imageBounds,
+          );
         });
       case _CropHandleType.bottomLeft:
         setState(() {
-          final left = point.dx.clamp(_imageBounds.left, current.right - minSize).toDouble();
+          final left = _safeClamp(point.dx, _imageBounds.left, current.right - minSize);
           final top = current.top;
           final right = current.right;
-          final bottom = point.dy.clamp(current.top + minSize, _imageBounds.bottom).toDouble();
-          _cropRect = Rect.fromLTRB(left, top, right, bottom);
+          final bottom = _safeClamp(point.dy, current.top + minSize, _imageBounds.bottom);
+          _cropRect = _clampCrop(
+            Rect.fromLTRB(left, top, right, bottom),
+            _imageBounds,
+          );
         });
       case _CropHandleType.bottomRight:
         setState(() {
           final left = current.left;
           final top = current.top;
-          final right = point.dx.clamp(current.left + minSize, _imageBounds.right).toDouble();
-          final bottom = point.dy.clamp(current.top + minSize, _imageBounds.bottom).toDouble();
-          _cropRect = Rect.fromLTRB(left, top, right, bottom);
+          final right = _safeClamp(point.dx, current.left + minSize, _imageBounds.right);
+          final bottom = _safeClamp(point.dy, current.top + minSize, _imageBounds.bottom);
+          _cropRect = _clampCrop(
+            Rect.fromLTRB(left, top, right, bottom),
+            _imageBounds,
+          );
         });
     }
   }
@@ -765,18 +805,26 @@ class _PhotoEditorViewState extends State<PhotoEditorView>
       _cropRect.height > 0;
     final sourceRect = hasValidBounds
       ? Rect.fromLTRB(
-        ((_cropRect.left - _imageBounds.left) / _imageBounds.width * image.width)
-          .clamp(0.0, image.width.toDouble())
-          .toDouble(),
-        ((_cropRect.top - _imageBounds.top) / _imageBounds.height * image.height)
-          .clamp(0.0, image.height.toDouble())
-          .toDouble(),
-        ((_cropRect.right - _imageBounds.left) / _imageBounds.width * image.width)
-          .clamp(0.0, image.width.toDouble())
-          .toDouble(),
-        ((_cropRect.bottom - _imageBounds.top) / _imageBounds.height * image.height)
-          .clamp(0.0, image.height.toDouble())
-          .toDouble(),
+        _safeClamp(
+          (_cropRect.left - _imageBounds.left) / _imageBounds.width * image.width,
+          0.0,
+          image.width.toDouble(),
+        ),
+        _safeClamp(
+          (_cropRect.top - _imageBounds.top) / _imageBounds.height * image.height,
+          0.0,
+          image.height.toDouble(),
+        ),
+        _safeClamp(
+          (_cropRect.right - _imageBounds.left) / _imageBounds.width * image.width,
+          0.0,
+          image.width.toDouble(),
+        ),
+        _safeClamp(
+          (_cropRect.bottom - _imageBounds.top) / _imageBounds.height * image.height,
+          0.0,
+          image.height.toDouble(),
+        ),
         )
       : Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble());
     final safeSourceRect = Rect.fromLTRB(
@@ -784,14 +832,22 @@ class _PhotoEditorViewState extends State<PhotoEditorView>
       sourceRect.top,
       sourceRect.right > sourceRect.left
         ? sourceRect.right
-        : (sourceRect.left + 1).clamp(0.0, image.width.toDouble()).toDouble(),
+        : _safeClamp(sourceRect.left + 1, 0.0, image.width.toDouble()),
       sourceRect.bottom > sourceRect.top
         ? sourceRect.bottom
-        : (sourceRect.top + 1).clamp(0.0, image.height.toDouble()).toDouble(),
+        : _safeClamp(sourceRect.top + 1, 0.0, image.height.toDouble()),
     );
 
-    final outputWidth = safeSourceRect.width.round().clamp(1, image.width);
-    final outputHeight = safeSourceRect.height.round().clamp(1, image.height);
+    final outputWidth = _safeClamp(
+      safeSourceRect.width.roundToDouble(),
+      1.0,
+      image.width.toDouble(),
+    ).toInt();
+    final outputHeight = _safeClamp(
+      safeSourceRect.height.roundToDouble(),
+      1.0,
+      image.height.toDouble(),
+    ).toInt();
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
